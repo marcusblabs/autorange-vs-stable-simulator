@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoRange vs Stable Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* balancer.defilytica.com — exact live values (slate-gray + brand purple, Satoshi) */
+    --bg:#383e47;--bg2:#3b3b3b;--panel:#3f4650;--panel2:#464d58;--field-bd:#535d6a;
+    --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.16);--txt:rgba(255,255,255,.92);--muted:#a0aec0;--muted2:#c2cbd8;
+    --accent:#7f6ae8;--accent-dim:#6b54e0;--accent2:#b3aef5;--slate:#8b97ac;--warn:#f9b5a8;--gold:#eaa879;--pos:#63f2be;
+    /* exact MUI elevation from the live site (note the top-left white highlight) */
+    --elev:0 0 0 1px rgba(0,0,0,.02),1px 1px 1px -.5px rgba(0,0,0,.06),3px 3px 3px -1.5px rgba(0,0,0,.06),6px 6px 6px -3px rgba(0,0,0,.06),12px 12px 12px -6px rgba(0,0,0,.06),24px 24px 24px -12px rgba(0,0,0,.1),-.5px -1px 0 0 rgba(255,255,255,.15);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--bg);color:var(--txt);font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+  body{background:#383e47;min-height:100vh;padding:24px 16px 64px;font-feature-settings:"tnum" 1;line-height:1.5}
+  .mono{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1120px;margin:0 auto}
+  .ar{color:var(--accent)} .fr{color:var(--slate)}
+
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:24px}
+  .title h1{font-size:24px;font-weight:700;letter-spacing:-.01em;background:linear-gradient(90deg,#b3aef5 0%,#d7cbe7 25%,#e5c8c8 50%,#eaa879 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+  .title h1 span{-webkit-text-fill-color:transparent}
+  .title p{color:var(--muted);font-size:15px;font-weight:500;margin-top:6px;max-width:620px;line-height:1.5}
+  .pill{display:inline-flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:var(--panel)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .dot.off{background:var(--warn);box-shadow:0 0 10px var(--warn)}
+
+  .panel{background:var(--panel);border:1px solid rgba(255,255,255,.09);border-radius:8px;padding:16px;box-shadow:var(--elev)}
+  .panel + .panel{margin-top:16px}
+  .ph{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:9px}
+  .ph::before{content:"";width:14px;height:2px;background:var(--accent);display:inline-block;border-radius:2px}
+  .ph .right{margin-left:auto;text-transform:none;letter-spacing:0;color:var(--muted2);font-size:12px}
+
+  .grid{display:grid;grid-template-columns:362px 1fr;gap:16px;align-items:start;margin-top:16px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+
+  .field{margin-bottom:15px}
+  .field:last-child{margin-bottom:0}
+  .field label{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted2);margin-bottom:7px}
+  .field label .u{color:var(--muted);text-transform:none;letter-spacing:0;font-size:11px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+  input[type=text],input[type=number],select{width:100%;background:var(--bg2);border:1px solid var(--field-bd);border-radius:6px;color:var(--txt);font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;font-size:15px;padding:12px;outline:none;transition:border-color .15s,box-shadow .15s}
+  input[type=text]{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif}
+  select{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;cursor:pointer;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) 19px,calc(100% - 11px) 19px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:30px}
+  input:focus,select:focus{border-color:var(--accent-dim);box-shadow:0 0 0 3px rgba(127,106,232,.12)}
+  input.bad{border-color:var(--warn);box-shadow:0 0 0 3px rgba(255,122,107,.12)}
+
+  input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:4px;background:var(--line2);outline:none;margin-top:11px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid var(--bg);box-shadow:0 0 0 1px var(--accent-dim),0 0 10px rgba(127,106,232,.5)}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid var(--bg)}
+
+  .btn{background:var(--accent);border:none;color:#ffffff;font-weight:600;font-family:inherit;font-size:13px;padding:10px 15px;border-radius:8px;cursor:pointer;transition:filter .14s}
+  .btn:hover{filter:brightness(1.08)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .gbtn{flex:1;background:var(--panel2);border:1px solid var(--line2);color:var(--muted2);font-size:12px;padding:8px;border-radius:7px;cursor:pointer;font-family:inherit;transition:all .14s}
+  .gbtn:hover{border-color:var(--accent-dim);color:var(--txt)}
+  .btnrow{display:flex;gap:8px;margin-top:10px}
+  .toggle{display:flex;background:var(--bg2);border:1px solid var(--field-bd);border-radius:6px;padding:3px;gap:3px}
+  .toggle button{flex:1;background:transparent;border:none;color:var(--muted2);font-family:inherit;font-size:12.5px;padding:9px;border-radius:6px;cursor:pointer;transition:all .14s}
+  .toggle button.on{background:var(--accent);color:#ffffff;font-weight:600}
+
+  .vunit-toggle{display:inline-flex;gap:2px;margin-left:8px;vertical-align:middle;background:var(--bg2);border:1px solid var(--field-bd);border-radius:6px;padding:2px}
+  .vunit-toggle button{background:transparent;border:none;color:var(--muted2);font-family:inherit;font-size:10.5px;font-weight:600;letter-spacing:.04em;padding:3px 9px;border-radius:4px;cursor:pointer;text-transform:none}
+  .vunit-toggle button.on{background:var(--accent);color:#fff}
+  .vusd{font-size:12.5px;color:var(--muted2);margin-top:8px}
+  .vusd b{color:var(--accent);font-weight:600;font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif}
+  .note{font-size:12px;color:var(--warn);margin-top:11px;line-height:1.4;display:none}
+  .note.show{display:block}
+  .status{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.45}
+  .status.err{color:var(--warn)}
+
+  /* token registry */
+  .addrow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
+  @media(max-width:680px){.addrow{grid-template-columns:1fr}}
+  .drawer-help{font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+  .drawer-help b{color:var(--muted2);font-weight:600}
+  .addchain{color:var(--accent-dim);text-transform:none;letter-spacing:0;font-size:11px}
+  .setup-divider{height:1px;background:var(--line);margin:6px 0 16px}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px;min-height:8px}
+  .chip{display:inline-flex;align-items:center;gap:9px;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:7px 9px 7px 12px;font-size:13px}
+  .chip .cdot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 7px var(--accent);flex:none}
+  .chip .cdot.low{background:var(--gold);box-shadow:0 0 7px var(--gold)}
+  .chip .csym{font-weight:600}
+  .chainhint{font-size:12px;color:var(--muted);margin-top:9px}
+
+  /* collapsible registry drawer */
+  .reg-toggle{cursor:pointer;user-select:none;margin-bottom:16px}
+  .reg-toggle:hover .chev{color:var(--accent)}
+  .reg-toggle:focus-visible{outline:2px solid var(--accent-dim);outline-offset:3px;border-radius:6px}
+  .reg-summary{flex:1;display:none;text-transform:none;letter-spacing:0;color:var(--muted2);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .reg-summary b{color:var(--txt)} .reg-summary .ar{color:var(--accent)}
+  .chev{margin-left:12px;color:var(--muted);font-size:11px;transition:color .15s}
+  .panel.collapsed .reg-toggle{margin-bottom:0}
+  .panel.collapsed .reg-body{display:none}
+  .panel.collapsed .reg-summary{display:block}
+  .panel.collapsed #srctag{display:none}
+  .chip .cprice{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;color:var(--accent)}
+  .chip .cchain{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .chip .crm{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;border-radius:4px}
+  .chip .crm:hover{color:var(--warn)}
+  .pairbox{margin-top:18px;border-top:1px solid var(--line);padding-top:16px;display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end}
+  @media(max-width:680px){.pairbox{grid-template-columns:1fr}}
+  .derived{margin-top:14px;font-size:14px;color:var(--muted2);line-height:1.5}
+  .derived b{color:var(--txt)} .derived .sub2{color:var(--muted);font-size:12px;margin-left:6px}
+  .optline{display:flex;align-items:center;gap:14px;margin-top:13px;flex-wrap:wrap;font-size:13px;color:var(--muted2)}
+  .optline label{display:flex;align-items:center;gap:7px;cursor:pointer}
+  .optline input[type=number]{width:70px;padding:6px 8px;font-size:13px}
+  input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
+
+  .hero{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;margin-bottom:16px}
+  @media(max-width:560px){.hero{grid-template-columns:1fr}}
+  .heromain{background:linear-gradient(150deg,rgba(127,106,232,.22),rgba(127,106,232,.04)),var(--panel);border:none;border-radius:8px;padding:20px;position:relative;overflow:hidden;box-shadow:var(--elev),0 0 0 1px rgba(127,106,232,.4)}
+  .heromain::after{content:"";position:absolute;right:-40px;top:-40px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(127,106,232,.28),transparent 70%)}
+  .heromain .k{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);opacity:.9}
+  .bigmult{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;font-weight:700;font-size:62px;line-height:1;margin:12px 0 6px;color:#ffffff;text-shadow:0 0 28px rgba(127,106,232,.55);letter-spacing:-.02em}
+  .bigmult .x{font-size:30px;color:var(--accent);margin-left:4px}
+  .heromain .sub{font-size:12.5px;color:var(--muted2);line-height:1.5}
+  .heromain .sub b{color:var(--txt);font-weight:600}
+  .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .stat{background:var(--panel);border:1px solid rgba(255,255,255,.09);border-radius:8px;padding:16px;box-shadow:var(--elev)}
+  .stat .k{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+  .stat .v{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;font-size:19px;font-weight:600;margin-top:5px;color:var(--txt)}
+  .stat .v.sm{font-size:15px}
+  .stat .v .unit{font-size:11px;color:var(--muted);font-weight:400;margin-left:3px}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:right;padding:10px 8px;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  thead th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;border-bottom:1px solid var(--line2)}
+  td.lab{color:var(--muted2)} td .m{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif}
+  tr.hl td{background:rgba(127,106,232,.04)}
+  .factor{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;font-weight:700;color:var(--gold)}
+
+  .legend{display:flex;gap:18px;font-size:12px;color:var(--muted2);margin:2px 0 12px}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .swatch{width:13px;height:3px;border-radius:2px;display:inline-block}
+  svg{width:100%;height:auto;display:block}
+  .axlab{fill:var(--muted);font-size:10px;font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif}
+  .gridln{stroke:var(--line);stroke-width:1}
+
+  footer{margin-top:20px;border-top:1px solid var(--line);padding-top:16px;color:var(--muted);font-size:12px;line-height:1.6}
+  footer code{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;color:var(--muted2);background:var(--panel);padding:2px 6px;border-radius:5px;font-size:11.5px}
+  footer b{color:var(--muted2);font-weight:600}
+  footer a{color:var(--accent-dim)}
+  .fadein{animation:fi .5s ease both}
+  @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap fadein">
+  <header>
+    <div class="title">
+      <h1><span>AutoRange</span> vs <span>Stable</span></h1>
+      <p>Compare swap slippage between a concentrated AutoRange band and a Curve-style Stable pool, on the same pair and same capital. Import a Curve pool to autofill its parameters, or enter them by hand.</p>
+    </div>
+    <div class="pill"><span class="dot" id="netdot"></span> <span id="netlabel">live</span></div>
+  </header>
+
+  <!-- TOKEN LIBRARY (collapsible drawer — add / remove tokens per chain only) -->
+  <div class="panel collapsed" id="regpanel">
+    <div class="ph reg-toggle" id="regtoggle" role="button" tabindex="0" aria-expanded="false">
+      <span>Token library</span>
+      <span class="reg-summary" id="regsummary"></span>
+      <span class="right" id="srctag">source: DefiLlama</span>
+      <span class="chev" id="regchev">&#9656;</span>
+    </div>
+    <div class="reg-body" id="regbody">
+      <p class="drawer-help">Save tokens here, then pick the pair to analyze under <b>Pool setup</b> below. The active chain is set there — new tokens are added to it.</p>
+      <div class="addrow">
+        <div class="field" style="margin:0">
+          <label>Contract address <span class="u" id="addrhint">(0x...)</span> <span class="addchain" id="addchain"></span></label>
+          <input type="text" id="addr" placeholder="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2">
+        </div>
+        <button class="btn" id="addtok">Add token</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="chainhint" id="chainhint"></div>
+      <div style="margin-top:14px"><button class="gbtn" style="flex:none;padding:7px 14px" id="refresh">Refresh prices</button></div>
+      <div class="status" id="status"></div>
+    </div><!-- /reg-body -->
+  </div>
+
+  <div class="grid">
+    <!-- INPUTS -->
+    <div>
+      <div class="panel">
+        <div class="ph">Pool setup <span class="right"><a href="#" id="openlib" style="color:var(--accent-dim)">+ manage tokens</a></span></div>
+        <div class="field">
+          <label>Chain</label>
+          <select id="chain"></select>
+        </div>
+        <div class="field row2">
+          <div><label>Base token (X)</label><select id="base"></select></div>
+          <div><label>Quote token (Y)</label><select id="quote"></select></div>
+        </div>
+        <div class="derived" id="derived">Select two priced tokens to derive the pair price.</div>
+        <div class="optline">
+          <button class="btn" id="apply" disabled style="flex:none;padding:8px 14px">Use pair</button>
+        </div>
+
+        <div class="setup-divider"></div>
+
+        <div class="field">
+          <label>Import from Curve pool <span class="u">paste address or pool URL</span></label>
+          <div class="addrow" style="grid-template-columns:1fr auto">
+            <input type="text" id="curveAddr" placeholder="0x17f9682c9cd1a448b31c0428f1d0783ed13a9fa3 (alUSD/frxUSD)">
+            <button class="btn" id="curveBtn" style="padding:8px 14px">Import</button>
+          </div>
+          <div class="status" id="curveStatus"></div>
+        </div>
+
+        <div class="setup-divider"></div>
+
+        <div class="field">
+          <label>Stable pool <span class="u" id="stableUnit">(Curve/Balancer StableSwap)</span></label>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px">
+            <div><label style="margin-bottom:5px;color:var(--muted)">A (amplification)</label><input type="number" id="A" value="300" step="any" min="1"></div>
+            <div><label style="margin-bottom:5px;color:var(--muted)">Swap fee %</label><input type="number" id="fee" value="0.04" step="0.001" min="0"></div>
+            <div><label style="margin-bottom:5px;color:var(--muted)">Rate (Y per X)</label><input type="number" id="rate" value="1.0" step="any" min="0"></div>
+          </div>
+        </div>
+
+        <div class="setup-divider"></div>
+
+        <div class="field">
+          <label>AutoRange band <span class="u" id="punit">(Y per X)</span></label>
+          <div class="row2">
+            <div><label style="margin-bottom:5px;color:var(--muted)">Lower bound Pa</label><input type="number" id="pa" value="0.995" step="any"></div>
+            <div><label style="margin-bottom:5px;color:var(--muted)">Upper bound Pb</label><input type="number" id="pb" value="1.005" step="any"></div>
+          </div>
+          <div class="optline" style="margin-top:10px">
+            <label><input type="checkbox" id="autoband" checked> auto-center on rate at &plusmn;</label>
+            <input type="number" id="bandw" value="0.5" step="0.1"> <span>% width</span>
+            <button class="gbtn" id="narrow" style="flex:none;padding:6px 12px">Tighten</button>
+            <button class="gbtn" id="widen" style="flex:none;padding:6px 12px">Widen</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Pool value
+            <span class="vunit-toggle" id="vunit">
+              <button type="button" id="vuUsd" class="on">USD</button>
+              <button type="button" id="vuTok">Token</button>
+            </span>
+            <span class="u">applied identically to both books</span>
+          </label>
+          <input type="number" id="v" value="1000000" step="any">
+          <div class="vusd" id="vusd"></div>
+        </div>
+        <div class="note" id="note"></div>
+      </div>
+
+      <div class="panel">
+        <div class="ph">Trade probe</div>
+        <div class="field">
+          <label>Direction</label>
+          <div class="toggle" id="dir">
+            <button data-d="xy" class="on" id="dxy">Sell X for Y</button>
+            <button data-d="yx" id="dyx">Sell Y for X</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Trade size <span class="u" id="tunit">(X in)</span></label>
+          <input type="number" id="ts" value="1" step="any">
+          <input type="range" id="tsl" min="0" max="10" step="0.01" value="1">
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div>
+      <div class="hero">
+        <div class="heromain">
+          <div class="k">Verdict at current trade size</div>
+          <div class="bigmult mono"><span id="verdictBig">—</span></div>
+          <div class="sub" id="verdictSub">Set up a pair and a trade size to compare both books.</div>
+        </div>
+        <div class="statgrid">
+          <div class="stat"><div class="k">Stable slippage</div><div class="v mono" id="stSt">&mdash;</div></div>
+          <div class="stat"><div class="k">AutoRange slippage</div><div class="v mono" id="stAr">&mdash;</div></div>
+          <div class="stat"><div class="k">Stable A</div><div class="v mono sm" id="stA">&mdash;</div></div>
+          <div class="stat"><div class="k">Stable fee</div><div class="v mono sm" id="stFee">&mdash;</div></div>
+          <div class="stat"><div class="k">Current rate</div><div class="v mono sm" id="stRate">&mdash;</div></div>
+          <div class="stat"><div class="k">AR band-edge size</div><div class="v mono sm" id="stEdge">&mdash;</div></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="ph">Trade outcome</div>
+        <table>
+          <thead><tr><th>Book</th><th id="thout">Out</th><th>Exec price</th><th>Slippage</th></tr></thead>
+          <tbody>
+            <tr class="hl"><td class="lab fr">Stable</td><td class="m" id="s_out">&mdash;</td><td class="m" id="s_px">&mdash;</td><td class="m" id="s_sl">&mdash;</td></tr>
+            <tr><td class="lab ar">AutoRange</td><td class="m" id="a_out">&mdash;</td><td class="m" id="a_px">&mdash;</td><td class="m" id="a_sl">&mdash;</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:13px;font-size:13px;color:var(--muted2)">Slippage ratio: <span class="factor" id="slfac">&mdash;</span></div>
+        <div class="note" id="tnote"></div>
+      </div>
+
+      <div class="panel">
+        <div class="ph">Slippage vs trade size</div>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--accent)"></i> AutoRange</span>
+          <span><i class="swatch" style="background:var(--slate)"></i> Stable</span>
+          <span><i class="swatch" style="background:var(--warn)"></i> AR band edge</span>
+        </div>
+        <svg id="chart" viewBox="0 0 720 280" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+
+      <footer>
+        <div><b>Method.</b> Stable side uses Curve StableSwap-NG: invariant <code>D</code> solved by Newton iteration, <code>get_y</code> for the post-swap balance, balances rate-scaled by the per-token rate before applying the invariant. AutoRange side uses constant-product on virtual reserves <code>x_v = L/&radic;P</code>, <code>y_v = L&radic;P</code> with band exhaustion at <code>Pa</code>/<code>Pb</code>. Both books are sized to the same total value and centered on the same rate, so the only difference is the curve shape. Pool data via the <a href="https://api.curve.finance/" target="_blank" rel="noopener">Curve API</a>; token prices via the <a href="https://docs.llama.fi/coin-prices-api" target="_blank" rel="noopener">DefiLlama coins API</a>.</div>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const els = {};
+  ['chain','addr','addrhint','addtok','chips','chainhint','base','quote','apply','derived','autoband','bandw','refresh','status','srctag','netdot','netlabel',
+   'regpanel','regtoggle','regchev','regsummary','addchain','openlib',
+   'curveAddr','curveBtn','curveStatus',
+   'A','fee','rate','pa','pb','v','vunit','vuUsd','vuTok','vusd','ts','tsl','punit','tunit','note','tnote',
+   'verdictBig','verdictSub','stSt','stAr','stA','stFee','stRate','stEdge','thout',
+   's_out','s_px','s_sl','a_out','a_px','a_sl','slfac','chart','dxy','dyx','narrow','widen']
+   .forEach(k=>els[k]=$(k));
+
+  /* ---------- storage (safe: falls back to memory if blocked) ---------- */
+  const store = (()=>{ let mem={}, ok=true;
+    try{const t='__t';localStorage.setItem(t,'1');localStorage.removeItem(t);}catch(e){ok=false;}
+    return {
+      get(k){try{return ok?JSON.parse(localStorage.getItem(k)):mem[k];}catch(e){return mem[k];}},
+      set(k,v){try{ok?localStorage.setItem(k,JSON.stringify(v)):(mem[k]=v);}catch(e){mem[k]=v;}}
+    };
+  })();
+  const KEY='arvs.tokens.v1';
+  // Curve API endpoint + registries we'll scan when importing a pool
+  const CURVE_API='https://api.curve.finance/v1/getPools/ethereum/';
+  const CURVE_REGS=['main','crypto','factory','factory-crypto','factory-stable-ng','factory-twocrypto','factory-tricrypto','crvusd'];
+
+  /* ---------- chains ---------- */
+  const CHAINS=[['ethereum','Ethereum'],['arbitrum','Arbitrum'],['base','Base'],['optimism','Optimism'],
+    ['polygon','Polygon'],['bsc','BNB Chain'],['avax','Avalanche'],['xdai','Gnosis'],['monad','Monad'],['coingecko','CoinGecko ID']];
+  function chainLabel(k){const f=CHAINS.find(c=>c[0]===k);return f?f[1]:k;}
+  els.chain.innerHTML=CHAINS.map(c=>'<option value="'+c[0]+'">'+c[1]+'</option>').join('');
+  els.chain.addEventListener('change',()=>{
+    const cg=els.chain.value==='coingecko';
+    els.addrhint.textContent=cg?'(coingecko id)':'(0x...)';
+    els.addr.placeholder=cg?'bitcoin':'0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
+    // The chain is also the active context for the pair: you can only pair
+    // tokens that live on the same chain, so reset the selection on switch.
+    baseId=''; quoteId='';
+    render();
+  });
+
+  /* ---------- token state ---------- */
+  let tokens = store.get(KEY) || {};
+  let baseId='', quoteId='', dir='xy';
+  // The active pair symbols drive the model's labels. The token registry
+  // is the single source of truth — these are only ever set by applyPair().
+  let pairX='WBTC', pairY='WETH';
+  // Live USD price of the quote token (Y), captured when a pair is applied.
+  // Pool value is denominated in Y, so USD value = V * quotePriceUsd.
+  let quotePriceUsd=null;
+  // How the user enters Pool value: 'USD' or 'TOK' (the quote token).
+  // The model always works in token units; USD input is converted via quotePriceUsd.
+  let valueUnit='USD';
+  // Returns the pool value in quote-token (Y) units, whatever the input unit is.
+  function currentV(){
+    var raw=parseFloat(els.v.value);
+    if(!(raw>0)) return raw;
+    if(valueUnit==='USD') return quotePriceUsd ? raw/quotePriceUsd : raw;
+    return raw;
+  }
+
+  function setNet(ok){ els.netdot.classList.toggle('off',!ok); els.netlabel.textContent=ok?'live':'offline'; }
+  function status(msg,err){ els.status.textContent=msg||''; els.status.classList.toggle('err',!!err); }
+
+  async function fetchPrices(ids){
+    const url='https://coins.llama.fi/prices/current/'+ids.join(',')+'?searchWidth=6h';
+    const r=await fetch(url,{headers:{accept:'application/json'}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    return j.coins||{};
+  }
+  function pick(coins,id){ if(coins[id])return coins[id];
+    const k=Object.keys(coins).find(k=>k.toLowerCase()===id.toLowerCase()); return k?coins[k]:null; }
+
+  async function addToken(){
+    const chain=els.chain.value; let raw=els.addr.value.trim(); let id;
+    if(chain==='coingecko'){ if(!raw){status('Enter a CoinGecko id, e.g. bitcoin',true);return;} id='coingecko:'+raw.toLowerCase(); }
+    else { if(!/^0x[a-fA-F0-9]{40}$/.test(raw)){status('Enter a valid 0x contract address (40 hex chars).',true);return;} id=chain+':'+raw.toLowerCase(); }
+    status('Fetching '+id+' ...');
+    try{
+      const coins=await fetchPrices([id]); const c=pick(coins,id);
+      if(!c||c.price==null){status('No price returned for '+id+'. Check chain and address.',true);return;}
+      tokens[id]={id,chain,address:raw,symbol:c.symbol||'?',price:c.price,decimals:c.decimals,confidence:c.confidence,ts:c.timestamp};
+      store.set(KEY,tokens); els.addr.value=''; setNet(true);
+      render(); status('Added '+(c.symbol||id)+' at $'+smart(c.price));
+    }catch(e){ setNet(false); status('Could not reach pricing API ('+e.message+'). If you are viewing this inside a chat preview, external requests are blocked. It works once the page is deployed or served locally.',true); }
+  }
+
+  async function refreshAll(){
+    const ids=Object.keys(tokens); if(!ids.length){status('No tokens saved yet.');return;}
+    status('Refreshing '+ids.length+' price'+(ids.length>1?'s':'')+' ...');
+    try{
+      const coins=await fetchPrices(ids);
+      ids.forEach(id=>{const c=pick(coins,id); if(c&&c.price!=null){tokens[id].price=c.price;tokens[id].symbol=c.symbol||tokens[id].symbol;tokens[id].confidence=c.confidence;tokens[id].ts=c.timestamp;}});
+      store.set(KEY,tokens); setNet(true); render();
+      status('Prices updated '+new Date().toLocaleTimeString());
+    }catch(e){ setNet(false); status('Could not reach pricing API ('+e.message+'). Live pricing needs the page served over http(s); you can still enter the band manually below.',true); }
+  }
+
+  function removeToken(id){ delete tokens[id]; if(baseId===id)baseId=''; if(quoteId===id)quoteId=''; store.set(KEY,tokens); render(); }
+
+  /* ---------- render registry ---------- */
+  function confDot(t){
+    if(t.price==null) return '';
+    const low=(t.confidence!=null && t.confidence<0.9);
+    const title=t.confidence!=null?('price confidence '+(t.confidence*100).toFixed(0)+'%'):'live price';
+    return '<span class="cdot'+(low?' low':'')+'" title="'+title+'"></span>';
+  }
+  function render(){
+    const activeChain=els.chain.value;
+    const all=Object.values(tokens);
+    const onChain=all.filter(t=>t.chain===activeChain);
+    const others=all.length-onChain.length;
+
+    // Chips: only the active chain's tokens (registry is chain-scoped)
+    els.chips.innerHTML=onChain.map(t=>
+      '<div class="chip">'+confDot(t)+'<span class="csym">'+t.symbol+'</span><span class="cprice">'+(t.price!=null?'$'+smart(t.price):'&mdash;')+'</span><button class="crm" data-rm="'+t.id+'">&times;</button></div>'
+    ).join('') || '<span style="color:var(--muted);font-size:12.5px">No tokens on '+chainLabel(activeChain)+' yet. Paste an address above.</span>';
+    els.chips.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>removeToken(b.dataset.rm));
+
+    els.chainhint.textContent = others>0
+      ? ('+ '+others+' token'+(others>1?'s':'')+' saved on other chains — switch the Chain selector to use them.')
+      : '';
+
+    // Collapsed-drawer summary + "adding to {chain}" hint
+    els.regsummary.textContent = all.length
+      ? (all.length+' token'+(all.length>1?'s':'')+' saved · '+onChain.length+' on '+chainLabel(activeChain))
+      : 'No tokens saved yet';
+    els.addchain.textContent = 'on '+chainLabel(activeChain);
+
+    // Pair pickers: only the active chain's tokens, so you can only pair same-chain tokens
+    const opts='<option value="">&mdash;</option>'+onChain.map(t=>'<option value="'+t.id+'">'+t.symbol+'</option>').join('');
+    els.base.innerHTML=opts; els.quote.innerHTML=opts;
+    if(tokens[baseId]&&tokens[baseId].chain===activeChain){els.base.value=baseId;} else {baseId='';}
+    if(tokens[quoteId]&&tokens[quoteId].chain===activeChain){els.quote.value=quoteId;} else {quoteId='';}
+    updateDerived();
+  }
+  function updateDerived(){
+    const X=tokens[baseId],Y=tokens[quoteId];
+    if(X&&Y&&X.price&&Y.price){
+      const P=X.price/Y.price;
+      els.derived.innerHTML='1 <b>'+X.symbol+'</b> = <span class="ar mono">'+smart(P)+'</span> <b>'+Y.symbol+'</b><span class="sub2">($'+smart(X.price)+' / $'+smart(Y.price)+')</span>';
+      els.apply.disabled=false;
+    } else { els.derived.innerHTML='Select two priced tokens to derive the pair price.'; els.apply.disabled=true; }
+  }
+  function applyPair(){
+    const X=tokens[baseId],Y=tokens[quoteId]; if(!(X&&Y&&X.price&&Y.price))return;
+    const P=X.price/Y.price;        // Y per X
+    pairX=X.symbol; pairY=Y.symbol;
+    quotePriceUsd=Y.price;
+    // Rate (=current price) drives both books; band auto-centers around it.
+    els.rate.value=+P.toPrecision(8);
+    if(els.autoband.checked){
+      const w=Math.max(.0001,(parseFloat(els.bandw.value)||0.5)/100), s=1+w;
+      els.pa.value=+(P/s).toPrecision(8); els.pb.value=+(P*s).toPrecision(8);
+    }
+    recompute();
+  }
+
+  els.addtok.onclick=addToken;
+  els.addr.addEventListener('keydown',e=>{if(e.key==='Enter')addToken();});
+  els.refresh.onclick=refreshAll;
+  els.base.onchange=()=>{baseId=els.base.value;updateDerived();};
+  els.quote.onchange=()=>{quoteId=els.quote.value;updateDerived();};
+  els.apply.onclick=applyPair;
+
+  /* ---------- collapsible registry drawer ---------- */
+  const REGKEY='arsim.reg.collapsed';
+  function setReg(collapsed){
+    els.regpanel.classList.toggle('collapsed',collapsed);
+    els.regchev.innerHTML = collapsed ? '▸' : '▾';   // ▸ collapsed, ▾ expanded
+    els.regtoggle.setAttribute('aria-expanded', String(!collapsed));
+    store.set(REGKEY, collapsed);
+  }
+  els.regtoggle.addEventListener('click',()=>setReg(!els.regpanel.classList.contains('collapsed')));
+  els.regtoggle.addEventListener('keydown',e=>{
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();setReg(!els.regpanel.classList.contains('collapsed'));}
+  });
+  // "+ manage tokens" link in Pool setup opens the library drawer
+  els.openlib.addEventListener('click',e=>{
+    e.preventDefault();
+    setReg(false);
+    els.regpanel.scrollIntoView({behavior:'smooth',block:'start'});
+    els.addr.focus();
+  });
+
+  /* =========================================================
+     MODEL  (Stable vs AutoRange swap comparison + chart)
+     ========================================================= */
+  const num=el=>parseFloat(el.value);
+  function fmt(n,d){if(!isFinite(n))return '\u2014';return n.toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:0});}
+  function smart(n){const a=Math.abs(n);if(a===0)return '0';if(a>=1000)return fmt(n,0);if(a>=1)return fmt(n,3);if(a>=0.01)return fmt(n,4);return fmt(n,6);}
+  function pct(n){const a=Math.abs(n*100);if(a===0)return '0%';if(a<0.001)return '<0.001%';if(a<1)return a.toFixed(3)+'%';if(a<10)return a.toFixed(2)+'%';return a.toFixed(1)+'%';}
+
+  /* -------- AutoRange swap (constant product on virtual reserves) -------- */
+  function swapXForY(L,P,Pa,amtIn){const sP=Math.sqrt(P),xv=L/sP,yv=L*sP,nxv=xv+amtIn,nyv=L*L/nxv,nP=nyv/nxv;
+    if(nP<Pa){return{out:yv-L*Math.sqrt(Pa),newP:Pa,exhausted:true};}return{out:yv-nyv,newP:nP,exhausted:false};}
+  function swapYForX(L,P,Pb,amtIn){const sP=Math.sqrt(P),xv=L/sP,yv=L*sP,nyv=yv+amtIn,nxv=L*L/nyv,nP=nyv/nxv;
+    if(nP>Pb){return{out:xv-L/Math.sqrt(Pb),newP:Pb,exhausted:true};}return{out:xv-nxv,newP:nP,exhausted:false};}
+
+  /* -------- Curve StableSwap NG (n=2) -------- */
+  // Invariant D: 4A(x+y) + D = 4AD + D^3/(4xy), Newton iteration on D.
+  // xp = [xp_x, xp_y] are RATE-SCALED balances (xp_x = bal_x * rate_x, with rate_y=1 in our setup).
+  function stable_D(xp, A){
+    const n=2, S=xp[0]+xp[1];
+    if(!(S>0)) return 0;
+    const Ann=A*n*n;
+    let D=S;
+    for(let i=0;i<255;i++){
+      const Dp = D*D*D/(n*n*xp[0]*xp[1]);
+      const Dprev=D;
+      D = (Ann*S + Dp*n) * D / ((Ann-1)*D + (n+1)*Dp);
+      if(Math.abs(D-Dprev)<1e-12) break;
+    }
+    return D;
+  }
+  // Given new xp value of token i, solve for new xp of token j (n=2 -> i and j swap).
+  // Newton on y\u00b2 + (b - D) y = c with c = D^(n+1) / (n\u00b2 \u00b7 x_new \u00b7 Ann), b = x_new + D/Ann.
+  function stable_get_y(x_new, xp, A){
+    const n=2;
+    const D=stable_D(xp,A);
+    const Ann=A*n*n;
+    let c=D;
+    c = c*D/(x_new*n);
+    c = c*D/(Ann*n);
+    const b = x_new + D/Ann;
+    let y = D;
+    for(let k=0;k<255;k++){
+      const yprev=y;
+      y = (y*y + c) / (2*y + b - D);
+      if(Math.abs(y-yprev)<1e-12) break;
+    }
+    return y;
+  }
+  // Stable swap on a balanced pool of total value V (in Y units), rate r (Y per X),
+  // A, and fee. dir 'xy' = sell X for Y. amt is in input token units (not USD).
+  // Returns {out, exec, slippage, ideal}.
+  function stableSwap(V, r, A, fee, dir, amt){
+    if(!(V>0)||!(r>0)||!(A>0)||!(amt>0)) return {out:0,exec:r,slippage:0,ideal:0};
+    // Balanced equilibrium: xp_x = xp_y = V/2 (rate-scaled). So x_raw = V/(2r), y_raw = V/2.
+    const xp0=V/2, yp0=V/2;
+    if(dir==='xy'){
+      // Input dx in X tokens -> dx_xp = amt * r added to xp_x.
+      const xp_new = xp0 + amt*r;
+      const yp_new = stable_get_y(xp_new, [xp0,yp0], A);
+      const dy_xp = yp0 - yp_new;        // in xp (= Y units, since rate_y=1)
+      const dy = dy_xp * (1-fee);
+      const ideal = amt*r;
+      return {out:dy, exec: dy/amt, slippage:(ideal-dy)/ideal, ideal};
+    } else {
+      // Input dy in Y tokens -> added to xp_y directly.
+      const yp_new = yp0 + amt;
+      const xp_new = stable_get_y(yp_new, [yp0,xp0], A);
+      const dx_xp = xp0 - xp_new;        // in xp; convert back to raw X tokens: / r
+      const dx_raw = dx_xp / r;
+      const dx = dx_raw * (1-fee);
+      const ideal = amt/r;
+      return {out:dx, exec: amt/dx, slippage:(ideal-dx)/ideal, ideal};
+    }
+  }
+
+  /* -------- AutoRange swap helper (with fee + slippage shape matching the Stable one) -------- */
+  function arSwap(V, r, Pa, Pb, fee, dir, amt){
+    if(!(V>0)||!(r>0)||!(Pb>Pa)||!(Pa>0)||!(amt>0)) return {out:0,exec:r,slippage:0,ideal:0,exhausted:false};
+    const P = Math.min(Math.max(r, Pa), Pb);   // center on the rate (clamped to the band)
+    const sP=Math.sqrt(P), sPa=Math.sqrt(Pa), sPb=Math.sqrt(Pb);
+    const D = 2*sP - P/sPb - sPa;
+    if(!(D>0)) return {out:0,exec:r,slippage:0,ideal:0,exhausted:false};
+    const L = V/D;
+    if(dir==='xy'){
+      const res=swapXForY(L,P,Pa,amt);
+      const out = res.out * (1-fee);
+      const ideal = amt*r;
+      return {out, exec: out/amt, slippage:(ideal-out)/ideal, ideal, exhausted:res.exhausted, L, P, Pa, Pb};
+    } else {
+      const res=swapYForX(L,P,Pb,amt);
+      const out = res.out * (1-fee);
+      const ideal = amt/r;
+      return {out, exec: amt/out, slippage:(ideal-out)/ideal, ideal, exhausted:res.exhausted, L, P, Pa, Pb};
+    }
+  }
+  // Maximum AR input before band exhaust (used for chart x-range + warning).
+  function arEdge(V, r, Pa, Pb, dir){
+    if(!(V>0)||!(r>0)||!(Pb>Pa)||!(Pa>0)) return 1;
+    const P = Math.min(Math.max(r, Pa), Pb);
+    const sP=Math.sqrt(P), sPa=Math.sqrt(Pa), sPb=Math.sqrt(Pb);
+    const D=2*sP - P/sPb - sPa; if(!(D>0)) return 1;
+    const L=V/D;
+    return dir==='xy' ? L*(1/sPa - 1/sP) : L*(sPb - sP);
+  }
+
+  function recompute(){
+    const tx=pairX||'X',ty=pairY||'Y';
+    let Pa=num(els.pa),Pb=num(els.pb),A=num(els.A),fee=num(els.fee),r=num(els.rate),V=currentV();
+    if(els.autoband.checked && r>0){
+      const w=Math.max(.0005,(num(els.bandw)||0.5)/100);
+      const newPa=+(r*(1-w)).toPrecision(8), newPb=+(r*(1+w)).toPrecision(8);
+      if(document.activeElement!==els.pa){els.pa.value=newPa;Pa=newPa;}
+      if(document.activeElement!==els.pb){els.pb.value=newPb;Pb=newPb;}
+    }
+    els.punit.textContent='('+ty+' per '+tx+')';
+    els.vuTok.textContent=ty;
+
+    let bad=false,msg='';[els.pa,els.pb,els.A,els.fee,els.rate,els.v].forEach(e=>e.classList.remove('bad'));
+    if(!(Pa>0)){bad=true;els.pa.classList.add('bad');}
+    if(!(Pb>Pa)){bad=true;els.pb.classList.add('bad');msg='Upper bound must be above lower bound.';}
+    if(!(A>0)){bad=true;els.A.classList.add('bad');msg=msg||'A must be > 0.';}
+    if(!(fee>=0)){bad=true;els.fee.classList.add('bad');msg=msg||'Fee must be \u2265 0.';}
+    if(!(r>0)){bad=true;els.rate.classList.add('bad');msg=msg||'Rate must be > 0.';}
+    if(!(V>0)){bad=true;els.v.classList.add('bad');}
+    if(bad){els.note.textContent=msg||'Check the highlighted inputs.';els.note.classList.add('show');return;}
+    els.note.classList.remove('show');
+
+    // Pool-value readout (USD <-> Y token)
+    if(valueUnit==='USD'){
+      els.vusd.innerHTML = (V>0&&quotePriceUsd) ? '&approx; <b>'+smart(V)+' '+ty+'</b> at $'+smart(quotePriceUsd)+'/'+ty
+        : (V>0 ? '<span style="color:var(--warn)">Load a pair to fetch the live '+ty+' price for USD conversion</span>' : '');
+    } else {
+      els.vusd.innerHTML = (V>0&&quotePriceUsd) ? '&approx; <b>$'+smart(V*quotePriceUsd)+'</b> at $'+smart(quotePriceUsd)+'/'+ty : '';
+    }
+
+    // Trade probe: clamp to AR band edge so the slider/x-range stays meaningful
+    let amt=num(els.ts); if(!(amt>=0))amt=0;
+    const edge = arEdge(V, r, Pa, Pb, dir);
+    const xmax = Math.max(edge*1.5, edge>0?edge:1); // chart range = 1.5x the AR edge
+    els.tsl.max = xmax; els.tsl.step = xmax/1000;
+    if(amt>xmax) amt=xmax;
+    if(document.activeElement!==els.ts) els.ts.value = +amt.toPrecision(8);
+    els.tsl.value = Math.min(amt, xmax);
+
+    const feeFrac = fee/100;
+    const soldTok = dir==='xy'?tx:ty, gotTok = dir==='xy'?ty:tx;
+    els.tunit.textContent='('+soldTok+' in)'; els.thout.textContent='Out ('+gotTok+')';
+
+    // Execute both books with the current trade
+    const sres = stableSwap(V, r, A, feeFrac, dir, amt);
+    const ares = arSwap(V, r, Pa, Pb, feeFrac, dir, amt);
+
+    // Outcome rows
+    els.s_out.textContent = smart(sres.out);
+    els.a_out.innerHTML   = smart(ares.out) + (ares.exhausted?' <span style="color:var(--warn)">*</span>':'');
+    els.s_px.textContent  = amt>0?smart(sres.exec):smart(r);
+    els.a_px.textContent  = amt>0?smart(ares.exec):smart(r);
+    els.s_sl.textContent  = pct(sres.slippage);
+    els.a_sl.textContent  = pct(ares.slippage);
+
+    // Slippage ratio + verdict
+    const sSl=sres.slippage, aSl=ares.slippage;
+    let factor='\u2014', verdictBig='\u2014', verdictSub='';
+    if(amt<=0){
+      verdictBig='\u2014'; verdictSub='Set a trade size to compare.';
+    } else if(ares.exhausted){
+      verdictBig='<span style="color:var(--warn)">AR band exhausted</span>';
+      verdictSub='At this size, the AutoRange band fills entirely and cannot complete the trade \u2014 Stable wins by default. Use a tighter trade or a wider band.';
+      factor='<span style="color:var(--warn)">AR exhausted</span>';
+    } else if(sSl<=1e-7 && aSl<=1e-7){
+      verdictBig='Negligible'; verdictSub='Both books show effectively zero slippage at this size.';
+      factor='~1\u00d7';
+    } else {
+      const ratio = sSl===0 ? Infinity : (aSl===0 ? Infinity : (sSl>aSl ? sSl/aSl : aSl/sSl));
+      const arWins = aSl<sSl;
+      if(!isFinite(ratio)||ratio<1.05){
+        verdictBig='Roughly even';
+        verdictSub='Stable '+pct(sSl)+' vs AutoRange '+pct(aSl)+' \u2014 the difference is below 5% either way.';
+        factor='~1\u00d7';
+      } else {
+        verdictBig = (arWins?'AutoRange':'Stable')+' is <b>'+ratio.toFixed(2)+'&times;</b> tighter';
+        verdictSub = (arWins?'AutoRange':'Stable')+' delivers '+pct(arWins?aSl:sSl)+' vs '+pct(arWins?sSl:aSl)+' on the other book.';
+        factor = ratio.toFixed(2)+'&times; '+(arWins?'AutoRange':'Stable')+' tighter';
+      }
+    }
+    els.verdictBig.innerHTML = verdictBig;
+    els.verdictSub.innerHTML = verdictSub;
+    els.slfac.innerHTML = factor;
+
+    // Stat tiles
+    els.stSt.textContent  = amt>0?pct(sSl):'\u2014';
+    els.stAr.textContent  = amt>0?pct(aSl):'\u2014';
+    els.stA.textContent   = smart(A);
+    els.stFee.textContent = (fee).toFixed(3)+'%';
+    els.stRate.innerHTML  = smart(r)+'<span class="unit">'+ty+'/'+tx+'</span>';
+    els.stEdge.innerHTML  = smart(edge)+'<span class="unit">'+(dir==='xy'?tx:ty)+'</span>';
+
+    if(ares.exhausted){els.tnote.innerHTML='* AutoRange band exhausted at this trade size. In practice an AutoRange position recenters before the edge.';els.tnote.classList.add('show');}
+    else els.tnote.classList.remove('show');
+
+    drawChart(V, r, A, feeFrac, Pa, Pb, dir, amt, xmax, edge, aSl, sSl);
+  }
+
+  function drawChart(V, r, A, fee, Pa, Pb, dir, curAmt, xmax, edge, curAr, curSt){
+    const W=720,H=280,padL=52,padR=16,padT=14,padB=34,plotW=W-padL-padR,plotH=H-padT-padB,N=80;
+    if(!(xmax>0)){els.chart.innerHTML='';return;}
+    const arP=[],stP=[]; let ymax=1e-6;
+    for(let i=0;i<=N;i++){
+      const a = xmax*i/N;
+      const ar = arSwap(V, r, Pa, Pb, fee, dir, a);
+      const st = stableSwap(V, r, A, fee, dir, a);
+      let s1 = Math.min(Math.max(ar.slippage,0),1);
+      let s2 = Math.min(Math.max(st.slippage,0),1);
+      arP.push([a,s1]); stP.push([a,s2]);
+      ymax = Math.max(ymax, s1, s2);
+    }
+    ymax = Math.min(ymax*1.12, 1);
+    const sx=a=>padL+(a/xmax)*plotW, sy=s=>padT+plotH-(s/ymax)*plotH;
+    const path=p=>p.map((q,i)=>(i?'L':'M')+sx(q[0]).toFixed(1)+' '+sy(q[1]).toFixed(1)).join(' ');
+    let svg='';
+    for(let i=0;i<=4;i++){const sv=ymax*i/4,yy=sy(sv);
+      svg+='<line class="gridln" x1="'+padL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+yy.toFixed(1)+'"/>';
+      svg+='<text class="axlab" x="'+(padL-8)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end">'+(sv*100).toFixed(sv<0.001?4:sv<0.1?2:1)+'%</text>';}
+    for(let i=0;i<=4;i++){const xv=xmax*i/4;svg+='<text class="axlab" x="'+sx(xv).toFixed(1)+'" y="'+(H-12)+'" text-anchor="middle">'+smart(xv)+'</text>';}
+    if(edge>0 && edge<=xmax){
+      svg+='<line x1="'+sx(edge).toFixed(1)+'" y1="'+padT+'" x2="'+sx(edge).toFixed(1)+'" y2="'+(padT+plotH)+'" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 4" opacity="0.7"/>';
+    }
+    svg+='<path d="'+path(stP)+'" fill="none" stroke="var(--slate)" stroke-width="2"/>';
+    svg+='<path d="'+path(arP)+'" fill="none" stroke="var(--accent)" stroke-width="2.4"/>';
+    if(curAmt>0&&curAmt<=xmax){const cx=sx(curAmt);
+      svg+='<line x1="'+cx.toFixed(1)+'" y1="'+padT+'" x2="'+cx.toFixed(1)+'" y2="'+(padT+plotH)+'" stroke="var(--line2)" stroke-width="1"/>';
+      svg+='<circle cx="'+cx.toFixed(1)+'" cy="'+sy(Math.min(curSt,ymax)).toFixed(1)+'" r="4" fill="var(--slate)"/>';
+      svg+='<circle cx="'+cx.toFixed(1)+'" cy="'+sy(Math.min(curAr,ymax)).toFixed(1)+'" r="4.5" fill="var(--accent)" stroke="var(--bg)" stroke-width="1.5"/>';}
+    svg+='<text class="axlab" x="'+(padL+plotW/2)+'" y="'+(H-1)+'" text-anchor="middle" fill="var(--muted2)">trade size ('+(dir==='xy'?pairX:pairY)+' in)</text>';
+    els.chart.innerHTML=svg;
+  }
+
+  /* -------- Curve pool import (paste URL or address, autofill A/fee/rate/pair) -------- */
+  function parseCurveAddr(s){
+    s=(s||'').trim();
+    // Match a 0x...40 hex anywhere in the string (handles full URLs)
+    const m=s.match(/0x[a-fA-F0-9]{40}/);
+    return m ? m[0].toLowerCase() : '';
+  }
+  async function importCurve(){
+    const addr=parseCurveAddr(els.curveAddr.value);
+    if(!addr){els.curveStatus.textContent='Paste a 0x address or a curve.finance pool URL.';els.curveStatus.style.color='var(--warn)';return;}
+    els.curveStatus.style.color='';els.curveStatus.textContent='Searching Curve registries for '+addr.slice(0,8)+'\u2026';
+    try{
+      for(const reg of CURVE_REGS){
+        const r=await fetch(CURVE_API+reg);
+        if(!r.ok) continue;
+        const j=await r.json();
+        const pools=(j&&j.data&&j.data.poolData)||[];
+        const hit=pools.find(p=>(p.address||'').toLowerCase()===addr);
+        if(!hit) continue;
+        // Pull fields with sensible fallbacks
+        const A=parseFloat(hit.amplificationCoefficient||hit.params&&hit.params.A||300);
+        // Curve stores fee in basis points (10000 = 100%), or as a percent string. Be defensive.
+        const feeRaw = hit.params && hit.params.fee != null ? hit.params.fee : (hit.feePercentage!=null?hit.feePercentage:(hit.totalFee!=null?hit.totalFee:0.04));
+        // If fee looks like 10000-scaled, normalize.
+        const feeNum = parseFloat(feeRaw);
+        const feePct = feeNum>5 ? feeNum/100 : feeNum;  // 4 (=0.04%) is impossible, but >5 means basis-points encoding
+        const coins=(hit.coins||[]).map(c=>c.symbol||'?');
+        // Rate from stored balances: rate = (yp_y / xp_x) at equilibrium \u2248 1 for plain stables.
+        // If the pool exposes oracles/stored_rates, prefer those. Else derive from usdPrice if present.
+        let rate=1;
+        if(hit.coins && hit.coins.length>=2){
+          const c0=hit.coins[0], c1=hit.coins[1];
+          // Prefer per-coin USD prices (DefiLlama-aligned) -> rate = priceX_usd / priceY_usd
+          const p0=parseFloat(c0.usdPrice||c0.poolBalance&&0), p1=parseFloat(c1.usdPrice||0);
+          if(p0>0 && p1>0) rate = p0/p1;
+        }
+        // Apply to UI
+        els.A.value = +A.toFixed(4);
+        els.fee.value = +feePct.toFixed(4);
+        els.rate.value = +rate.toPrecision(8);
+        els.curveStatus.style.color='var(--pos)';
+        els.curveStatus.textContent='Imported '+(hit.name||hit.symbol||addr.slice(0,10))+' from '+reg+' \u2014 A='+A+', fee='+feePct.toFixed(3)+'%, rate='+rate.toPrecision(6)+', coins: '+coins.join('/');
+        recompute();
+        return;
+      }
+      els.curveStatus.style.color='var(--warn)';
+      els.curveStatus.textContent='Address not found in any Curve mainnet registry. Double-check the link.';
+    }catch(e){
+      els.curveStatus.style.color='var(--warn)';
+      els.curveStatus.textContent='Curve API error: '+e.message+'. CORS/blocked? Try again after a moment.';
+    }
+  }
+
+  /* wiring */
+  ['pa','pb','A','fee','rate','v','ts','bandw'].forEach(k=>els[k].addEventListener('input',recompute));
+
+  // Pool value unit toggle (USD <-> quote token). Converts the entered
+  // number so it stays the same real value when switching units.
+  function setValueUnit(u){
+    if(u===valueUnit){return;}
+    var raw=parseFloat(els.v.value);
+    if(raw>0 && quotePriceUsd){
+      if(u==='USD') els.v.value=+(raw*quotePriceUsd).toFixed(2);     // token -> USD
+      else          els.v.value=+(raw/quotePriceUsd).toPrecision(8); // USD -> token
+    }
+    valueUnit=u;
+    els.vuUsd.classList.toggle('on',u==='USD');
+    els.vuTok.classList.toggle('on',u!=='USD');
+    recompute();
+  }
+  els.vuUsd.addEventListener('click',()=>setValueUnit('USD'));
+  els.vuTok.addEventListener('click',()=>setValueUnit('TOK'));
+  els.tsl.addEventListener('input',()=>{els.ts.value=els.tsl.value;recompute();});
+  // Tighten/widen rescale the band around the current rate (not the geo center).
+  els.narrow.onclick=()=>{const r=num(els.rate),Pa=num(els.pa),Pb=num(els.pb);if(!(r>0&&Pb>Pa))return; els.pa.value=+(r-(r-Pa)*.6).toPrecision(8); els.pb.value=+(r+(Pb-r)*.6).toPrecision(8); els.autoband.checked=false; recompute();};
+  els.widen.onclick =()=>{const r=num(els.rate),Pa=num(els.pa),Pb=num(els.pb);if(!(r>0&&Pb>Pa))return; els.pa.value=+(r-(r-Pa)*1.6).toPrecision(8); els.pb.value=+(r+(Pb-r)*1.6).toPrecision(8); els.autoband.checked=false; recompute();};
+  els.dxy.parentElement.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;dir=b.dataset.d;els.dxy.classList.toggle('on',dir==='xy');els.dyx.classList.toggle('on',dir==='yx');recompute();});
+  els.autoband.addEventListener('change',recompute);
+  els.curveBtn.addEventListener('click',importCurve);
+  els.curveAddr.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();importCurve();}});
+
+  /* init: seed alUSD + frxUSD (the example Curve pool's tokens), refresh prices, then run */
+  (async function init(){
+    const sc=store.get(REGKEY);
+    setReg(sc===undefined||sc===null ? true : !!sc);
+    if(!Object.keys(tokens).length){
+      tokens={
+        'ethereum:0xbc6da0fe9ad5f3b0d58160288917aa56653660e9':{id:'ethereum:0xbc6da0fe9ad5f3b0d58160288917aa56653660e9',chain:'ethereum',address:'0xBC6DA0FE9aD5f3b0d58160288917AA56653660E9',symbol:'alUSD',price:null},
+        'ethereum:0xcacd6fd266af91b8aed52accc382b4e165586e29':{id:'ethereum:0xcacd6fd266af91b8aed52accc382b4e165586e29',chain:'ethereum',address:'0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29',symbol:'frxUSD',price:null}
+      };
+      store.set(KEY,tokens);
+    }
+    const ids=Object.keys(tokens);
+    if(ids.length && tokens[ids[0]]) els.chain.value = tokens[ids[0]].chain;
+    const sameChain = ids.filter(id => tokens[id].chain === els.chain.value);
+    baseId = sameChain[0] || ''; quoteId = sameChain[1] || '';
+    // Pre-fill the example Curve pool address so the user has a working import on first try
+    if(!els.curveAddr.value) els.curveAddr.value = '0x17f9682c9cd1a448b31c0428f1d0783ed13a9fa3';
+    render(); recompute();
+    await refreshAll();
+    if(tokens[baseId]&&tokens[quoteId]&&tokens[baseId].price&&tokens[quoteId].price) applyPair();
+  })();
+})();
+</script>
+</body>
+</html>
