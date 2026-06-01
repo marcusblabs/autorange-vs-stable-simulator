@@ -538,6 +538,17 @@
       els.apply.disabled=false;
     } else { els.derived.innerHTML='Select two priced tokens to derive the pair price.'; els.apply.disabled=true; }
   }
+  // Make symX/symY the active pair (drives every label + the USD/gas notional).
+  // Called by importers so the AutoRange side reflects the imported pool's tokens.
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function setActivePair(symX, symY, priceYUsd){
+    if(symX) pairX=symX;
+    if(symY) pairY=symY;
+    if(priceYUsd>0) quotePriceUsd=priceYUsd;
+    els.derived.innerHTML='Active pair: <b>'+esc(pairX)+'</b> / <b>'+esc(pairY)+'</b>'
+      + (quotePriceUsd ? ' <span class="sub2">'+esc(pairY)+' &approx; $'+smart(quotePriceUsd)+'</span>' : ' <span class="sub2">($-stable assumed)</span>')
+      + ' <span class="sub2">· from imported pool</span>';
+  }
   function applyPair(){
     const X=tokens[baseId],Y=tokens[quoteId]; if(!(X&&Y&&X.price&&Y.price))return;
     const P=X.price/Y.price;        // Y per X
@@ -756,6 +767,7 @@
 
     const soldTok = dir==='xy'?tx:ty, gotTok = dir==='xy'?ty:tx;
     els.tunit.textContent='('+soldTok+' in)'; els.thout.textContent='Out ('+gotTok+')';
+    els.dxy.textContent='Sell '+tx; els.dyx.textContent='Sell '+ty;
 
     // Gas + price params
     const priceY = quotePriceUsd || 1;     // $-stable quote \u2192 1 is a safe default
@@ -901,19 +913,22 @@
         const feeNum = parseFloat(feeRaw);
         const feePct = feeNum>5 ? feeNum/100 : feeNum;  // 4 (=0.04%) is impossible, but >5 means basis-points encoding
         const coins=(hit.coins||[]).map(c=>c.symbol||'?');
-        // Rate from stored balances: rate = (yp_y / xp_x) at equilibrium \u2248 1 for plain stables.
-        // If the pool exposes oracles/stored_rates, prefer those. Else derive from usdPrice if present.
-        let rate=1;
+        // Rate from per-coin USD prices: rate = priceX_usd / priceY_usd (Y per X). \u22481 for plain stables.
+        let rate=1, priceY=0;
         if(hit.coins && hit.coins.length>=2){
           const c0=hit.coins[0], c1=hit.coins[1];
-          // Prefer per-coin USD prices (DefiLlama-aligned) -> rate = priceX_usd / priceY_usd
-          const p0=parseFloat(c0.usdPrice||c0.poolBalance&&0), p1=parseFloat(c1.usdPrice||0);
+          const p0=parseFloat(c0.usdPrice||0), p1=parseFloat(c1.usdPrice||0);
           if(p0>0 && p1>0) rate = p0/p1;
+          if(p1>0) priceY = p1;
         }
         // Apply to UI
         els.A.value = +A.toFixed(4);
         els.fee.value = +feePct.toFixed(4);
+        els.arfee.value = +feePct.toFixed(4);   // default AR fee to the pool's fee
         els.rate.value = +rate.toPrecision(8);
+        setRateSource('manual');                 // imported rate is a snapshot
+        // The imported pool's coins become the active AutoRange pair.
+        setActivePair(coins[0], coins[1], priceY);
         els.curveStatus.style.color='var(--pos)';
         els.curveStatus.textContent='Imported '+(hit.name||hit.symbol||addr.slice(0,10))+' from '+reg+' \u2014 A='+A+', fee='+feePct.toFixed(3)+'%, rate='+rate.toPrecision(6)+', coins: '+coins.join('/');
         recompute();
@@ -929,6 +944,17 @@
 
   /* -------- Balancer pool import (v3, address == pool id) via the GraphQL API -------- */
   const BAL_CHAINS=['MAINNET','ARBITRUM','BASE','OPTIMISM','POLYGON','GNOSIS','AVALANCHE','SONIC'];
+  const BAL_LLAMA={MAINNET:'ethereum',ARBITRUM:'arbitrum',BASE:'base',OPTIMISM:'optimism',POLYGON:'polygon',GNOSIS:'xdai',AVALANCHE:'avax',SONIC:'sonic'};
+  async function fetchTokenUsd(chainEnum, address){
+    const key=BAL_LLAMA[chainEnum]; if(!key||!address) return 0;
+    try{
+      const id=key+':'+address.toLowerCase();
+      const r=await fetch('https://coins.llama.fi/prices/current/'+id);
+      const j=await r.json();
+      const c=j&&j.coins&&j.coins[id];
+      return c&&c.price>0 ? c.price : 0;
+    }catch(e){ return 0; }
+  }
   async function importBalancer(){
     const addr=parseCurveAddr(els.curveAddr.value);
     if(!addr){els.curveStatus.style.color='var(--warn)';els.curveStatus.textContent='Paste a Balancer pool address (or balancer.fi URL).';return;}
@@ -938,7 +964,7 @@
       let pool=null, chain=null;
       for(const ch of BAL_CHAINS){
         els.curveStatus.textContent='Checking '+ch+'…';
-        const q=`{ poolGetPool(id:"${addr}", chain:${ch}) { name type dynamicData { swapFee } ... on GqlPoolStable { amp poolTokens { symbol priceRate priceRateProvider } } } }`;
+        const q=`{ poolGetPool(id:"${addr}", chain:${ch}) { name type dynamicData { swapFee } ... on GqlPoolStable { amp poolTokens { symbol address priceRate priceRateProvider } } } }`;
         const r=await fetch(BAL_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
         const j=await r.json();
         const p=j&&j.data&&j.data.poolGetPool;
@@ -965,6 +991,11 @@
       // Default the AR fee to match the pool's fee on import (user can override)
       els.arfee.value=+feePct.toFixed(4);
       setRateSource('manual'); // imported rate is a snapshot; user can switch to live Provider
+      // Quote token USD price (for correct USD/gas notional on non-$1 pairs, e.g. wETH)
+      els.curveStatus.textContent='Fetching '+(coins[1]||'quote')+' price…';
+      const priceY = toks[1] ? await fetchTokenUsd(chain, toks[1].address) : 0;
+      // The imported pool's coins become the active AutoRange pair.
+      setActivePair(coins[0], coins[1], priceY);
       els.curveStatus.style.color='var(--pos)';
       els.curveStatus.textContent='Imported '+(pool.name||addr.slice(0,10))+' ('+found.chain+', '+pool.type+') — A='+A+', fee='+feePct.toFixed(3)+'%, rate='+rate.toPrecision(6)+', coins: '+coins.join('/')+(rpx?' · rate providers loaded':'');
       recompute();
