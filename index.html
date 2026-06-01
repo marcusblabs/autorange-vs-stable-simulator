@@ -895,7 +895,7 @@
   }
   async function importCurve(){
     const addr=parseCurveAddr(els.curveAddr.value);
-    if(!addr){els.curveStatus.textContent='Paste a 0x address or a curve.finance pool URL.';els.curveStatus.style.color='var(--warn)';return;}
+    if(!addr){els.curveStatus.textContent='Paste a 0x address or a curve.finance pool URL.';els.curveStatus.style.color='var(--warn)';return false;}
     els.curveStatus.style.color='';els.curveStatus.textContent='Searching Curve registries for '+addr.slice(0,8)+'\u2026';
     try{
       for(const reg of CURVE_REGS){
@@ -932,13 +932,15 @@
         els.curveStatus.style.color='var(--pos)';
         els.curveStatus.textContent='Imported '+(hit.name||hit.symbol||addr.slice(0,10))+' from '+reg+' \u2014 A='+A+', fee='+feePct.toFixed(3)+'%, rate='+rate.toPrecision(6)+', coins: '+coins.join('/');
         recompute();
-        return;
+        return true;
       }
       els.curveStatus.style.color='var(--warn)';
       els.curveStatus.textContent='Address not found in any Curve mainnet registry. Double-check the link.';
+      return false;
     }catch(e){
       els.curveStatus.style.color='var(--warn)';
       els.curveStatus.textContent='Curve API error: '+e.message+'. CORS/blocked? Try again after a moment.';
+      return false;
     }
   }
 
@@ -955,24 +957,27 @@
       return c&&c.price>0 ? c.price : 0;
     }catch(e){ return 0; }
   }
-  async function importBalancer(){
+  const ZERO_ADDR='0x0000000000000000000000000000000000000000';
+  async function importBalancer(quiet){
     const addr=parseCurveAddr(els.curveAddr.value);
-    if(!addr){els.curveStatus.style.color='var(--warn)';els.curveStatus.textContent='Paste a Balancer pool address (or balancer.fi URL).';return;}
+    if(!addr){if(!quiet){els.curveStatus.style.color='var(--warn)';els.curveStatus.textContent='Paste a Balancer pool address (or balancer.fi URL).';}return false;}
     els.curveStatus.style.color='';els.curveStatus.textContent='Looking up Balancer pool '+addr.slice(0,8)+'…';
     try{
-      // v3 pools use the address as their id. Try each chain directly (light query).
+      // v3 pools use the address as their id. Try MAINNET first (most common), then others.
       let pool=null, chain=null;
       for(const ch of BAL_CHAINS){
-        els.curveStatus.textContent='Checking '+ch+'…';
+        els.curveStatus.textContent='Checking Balancer on '+ch+'…';
         const q=`{ poolGetPool(id:"${addr}", chain:${ch}) { name type dynamicData { swapFee } ... on GqlPoolStable { amp poolTokens { symbol address priceRate priceRateProvider } } } }`;
-        const r=await fetch(BAL_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
-        const j=await r.json();
-        const p=j&&j.data&&j.data.poolGetPool;
+        let p=null;
+        try{
+          const r=await fetch(BAL_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
+          const j=await r.json();
+          p=j&&j.data&&j.data.poolGetPool;
+        }catch(e){ /* chain miss → keep scanning */ }
         if(p){ pool=p; chain=ch; break; }
       }
-      if(!pool){els.curveStatus.style.color='var(--warn)';els.curveStatus.textContent='Not found as a Balancer v3 pool on any supported chain. (v2 pools use a 66-char id — paste that.)';return;}
-      if(pool.type!=='STABLE'){els.curveStatus.style.color='var(--warn)';els.curveStatus.textContent='Found '+pool.type+' pool — this importer expects a STABLE pool.';return;}
-      const found={chain};
+      if(!pool){if(!quiet){els.curveStatus.style.color='var(--warn)';els.curveStatus.textContent='Not found as a Balancer v3 pool on any supported chain. (v2 pools use a 66-char id.)';}return false;}
+      if(pool.type!=='STABLE'){els.curveStatus.style.color='var(--warn)';els.curveStatus.textContent='Found a '+pool.type+' Balancer pool — this importer compares against StableSwap pools only.';return false;}
       const A=parseFloat(pool.amp||300);
       const feePct=parseFloat((pool.dynamicData&&pool.dynamicData.swapFee)||0.0004)*100; // swapFee is a fraction
       const toks=pool.poolTokens||[];
@@ -982,29 +987,48 @@
       if(toks.length>=2){
         const rX=parseFloat(toks[0].priceRate||1), rY=parseFloat(toks[1].priceRate||1);
         if(rX>0&&rY>0) rate=rX/rY;
-        rpx=toks[0].priceRateProvider||''; rpy=toks[1].priceRateProvider||'';
+        // Treat the zero address as "no rate provider" (constant rate of 1).
+        const px=toks[0].priceRateProvider||'', py=toks[1].priceRateProvider||'';
+        rpx = px.toLowerCase()===ZERO_ADDR ? '' : px;
+        rpy = py.toLowerCase()===ZERO_ADDR ? '' : py;
       }
       els.A.value=+A.toFixed(4);
       els.fee.value=+feePct.toFixed(4);
       els.rate.value=+rate.toPrecision(8);
-      if(rpx) els.rpX.value=rpx; if(rpy) els.rpY.value=rpy;
-      // Default the AR fee to match the pool's fee on import (user can override)
-      els.arfee.value=+feePct.toFixed(4);
-      setRateSource('manual'); // imported rate is a snapshot; user can switch to live Provider
+      els.rpX.value=rpx; els.rpY.value=rpy;
+      els.arfee.value=+feePct.toFixed(4);   // default AR fee to the pool's fee
+      setRateSource('manual'); // imported rate is a snapshot; switch to Provider for a live read
       // Quote token USD price (for correct USD/gas notional on non-$1 pairs, e.g. wETH)
       els.curveStatus.textContent='Fetching '+(coins[1]||'quote')+' price…';
       const priceY = toks[1] ? await fetchTokenUsd(chain, toks[1].address) : 0;
-      // The imported pool's coins become the active AutoRange pair.
       setActivePair(coins[0], coins[1], priceY);
+      const provNote = (rpx||rpy) ? ' · rate provider'+(rpx&&rpy?'s':'')+' loaded' : ' · no rate provider (constant rate)';
       els.curveStatus.style.color='var(--pos)';
-      els.curveStatus.textContent='Imported '+(pool.name||addr.slice(0,10))+' ('+found.chain+', '+pool.type+') — A='+A+', fee='+feePct.toFixed(3)+'%, rate='+rate.toPrecision(6)+', coins: '+coins.join('/')+(rpx?' · rate providers loaded':'');
+      els.curveStatus.textContent='Imported '+(pool.name||addr.slice(0,10))+' ('+chain+', '+pool.type+') — A='+A+', fee='+feePct.toFixed(3)+'%, rate='+rate.toPrecision(6)+', coins: '+coins.join('/')+provNote;
       recompute();
+      return true;
     }catch(e){
-      els.curveStatus.style.color='var(--warn)';
-      els.curveStatus.textContent='Balancer API error: '+e.message;
+      if(!quiet){els.curveStatus.style.color='var(--warn)';els.curveStatus.textContent='Balancer API error: '+e.message;}
+      return false;
     }
   }
-  function importPool(){ return importSrc==='balancer' ? importBalancer() : importCurve(); }
+  // Route to the chosen source; auto-detect from URL; fall back to the other source if the first misses.
+  async function importPool(){
+    const txt=els.curveAddr.value||'';
+    if(/balancer\.fi/i.test(txt) && importSrc!=='balancer') setImportSrc('balancer');
+    else if(/curve\.(finance|fi)/i.test(txt) && importSrc!=='curve') setImportSrc('curve');
+    const primary=importSrc;
+    const ok = primary==='balancer' ? await importBalancer() : await importCurve();
+    if(ok) return true;
+    // Try the other venue before giving up (handles "wrong toggle" silently).
+    const other = primary==='balancer' ? 'curve' : 'balancer';
+    els.curveStatus.style.color=''; els.curveStatus.textContent='Not found on '+primary+' — trying '+other+'…';
+    const ok2 = other==='balancer' ? await importBalancer(true) : await importCurve();
+    if(ok2){ setImportSrc(other); return true; }
+    els.curveStatus.style.color='var(--warn)';
+    els.curveStatus.textContent='Pool not found on Curve or Balancer (mainnet/v3). Check the address — for Balancer v2 paste the 66-char pool id.';
+    return false;
+  }
 
   /* -------- on-chain rate provider read: rate = getRate(X) / getRate(Y) -------- */
   async function rpcCall(to){
@@ -1018,15 +1042,16 @@
   }
   async function readRateProvider(){
     const ax=parseCurveAddr(els.rpX.value), ay=parseCurveAddr(els.rpY.value);
-    if(!ax){els.rpStatus.style.color='var(--warn)';els.rpStatus.textContent='Enter rate provider X (0x…).';return;}
+    // Either side may be blank → that token has no rate provider, so its rate is 1.
+    if(!ax&&!ay){els.rpStatus.style.color='var(--warn)';els.rpStatus.textContent='Enter at least one rate provider address.';return;}
     els.rpStatus.style.color='';els.rpStatus.textContent='Reading getRate()…';
     try{
-      const rX=await rpcCall(ax);
+      const rX=ax?await rpcCall(ax):1;
       const rY=ay?await rpcCall(ay):1;
       const rate=rX/rY;
       els.rate.value=+rate.toPrecision(8);
       els.rpStatus.style.color='var(--pos)';
-      els.rpStatus.textContent='rate = '+rX.toPrecision(6)+(ay?(' / '+rY.toPrecision(6)):'')+' = '+rate.toPrecision(6);
+      els.rpStatus.textContent='rate = '+(ax?rX.toPrecision(6):'1')+' / '+(ay?rY.toPrecision(6):'1')+' = '+rate.toPrecision(6);
       recompute();
     }catch(e){
       els.rpStatus.style.color='var(--warn)';
