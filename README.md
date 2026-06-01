@@ -6,12 +6,14 @@ Built for the case the [AutoRange Depth Simulator](https://marcusblabs.github.io
 
 ## Features
 
-- **Import from Curve pool**: paste any Curve mainnet pool URL or address. The app scans Curve's registries (`main`, `factory-stable-ng`, `factory-tricrypto`, `crvusd`, …) and autofills the amplification `A`, swap fee, current rate, and coin symbols.
-- **Manual mode**: set `A`, fee, rate (Y per X), AutoRange band `Pa`/`Pb`, and pool value yourself.
-- **Oracle/rate ready**: the rate input is the single knob for non-1:1 correlated pairs (wstETH/ETH, sDAI/DAI, etc.). When a future contract-read hook is added, it plugs in here.
-- **Pool value in USD or token** with a one-click toggle (powered by live DefiLlama prices for the saved tokens).
-- **Side-by-side outcome**: Stable vs AutoRange — output, execution price, slippage. Verdict headline shows which is tighter and by how much, or flags `AR band exhausted` when the trade exceeds the band's capacity.
-- **Slippage-vs-size chart** for both books, with the AR band-edge marked.
+- **Import from Curve _or_ Balancer**: a source toggle. Curve scans the public registries (`main`, `factory-stable-ng`, `factory-tricrypto`, `crvusd`, …); Balancer uses the v3 GraphQL API (`poolGetPool`). Either way it autofills amplification `A`, swap fee, the current rate, coin symbols, and — for Balancer — the per-token rate-provider addresses.
+- **Live rate-provider reads**: set the rate from on-chain `getRate()` (Balancer rate-provider standard) via a public RPC. Rate (Y per X) = `getRate(X) / getRate(Y)`. Handles wstETH/ETH, sDAI/DAI and any rated pair. Rate source toggle: **Market** (DefiLlama prices) / **Manual** / **Provider** (live contract read).
+- **Per-book swap fees**: independent Stable fee and AutoRange fee, since a Balancer v3 AR pool can run a different fee than the Curve/Balancer stable pool it's compared against.
+- **Gas-aware "all-in" cost**: all-in = slippage + swap fee + gas, where gas USD = `units × gwei × 1e-9 × ETH price`. Live gas price (public RPC) and ETH price (DefiLlama) auto-fetch on load; gas units per book are editable (Balancer v3 / AutoRange swaps cost more gas than Curve, so they default higher).
+- **Break-even trade size**: the trade size where both books' all-in cost is equal. Below it, the lower-gas venue wins; above it, the lower-slippage venue wins. Marked on the chart (gold line) and shown as a stat.
+- **Fit band to Stable**: given a target trade size, solves for the AutoRange band half-width whose all-in cost matches the Stable pool at that size — so you can size an AR position to behave like a given stable pool.
+- **Cost-vs-size chart** with a toggle between **Slippage %** and **All-in %** (the latter shows the gas-driven crossover), AR band-edge and break-even markers.
+- **Pool value in USD or token** with a one-click toggle (live DefiLlama prices).
 - **Same design system** as the depth simulator (Defilytica colors, Satoshi typography, MUI cards) so they read as a suite.
 
 ## Math
