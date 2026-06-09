@@ -2,3 +2,6 @@
 .vscode/
 .idea/
 .claude/
+node_modules/
+dist/
+*.log
