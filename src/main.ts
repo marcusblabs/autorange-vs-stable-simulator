@@ -18,7 +18,7 @@ import {
 import {
   gasUsd, evalAt, findBreakEven, fitBand, type CostCtx,
 } from './cost';
-import { drawChart } from './chart';
+import { drawChart, type ChartGeom } from './chart';
 import {
   CHAINS, chainLabel, fetchPrices, pick, importBalancer, WrongPoolTypeError,
   readRateProviders, refreshGas,
@@ -522,20 +522,60 @@ function recompute(): void {
     show('tnote', false);
   }
 
-  html(
-    'chart',
-    drawChart({
-      ctx,
-      dir: state.dir,
-      curAmt: amt.toNumber(),
-      xmax: xmax.toNumber(),
-      edge: edge.toNumber(),
-      be: be ? be.toNumber() : null,
-      mode: state.chartMode,
-      pairX: state.pairX,
-      pairY: state.pairY,
-    }),
-  );
+  const chartRes = drawChart({
+    ctx,
+    dir: state.dir,
+    curAmt: amt.toNumber(),
+    xmax: xmax.toNumber(),
+    edge: edge.toNumber(),
+    be: be ? be.toNumber() : null,
+    mode: state.chartMode,
+    pairX: state.pairX,
+    pairY: state.pairY,
+  });
+  html('chart', chartRes.svg);
+  // Keep geometry + the live context so the hover handler can read values
+  // at any trade size between renders.
+  lastChart = chartRes.geom ? { geom: chartRes.geom, ctx, dir: state.dir, pairX: state.pairX, pairY: state.pairY } : null;
+}
+
+// Chart hover state + handler (attached once in wire()).
+let lastChart: { geom: ChartGeom; ctx: CostCtx; dir: Dir; pairX: string; pairY: string } | null = null;
+
+function setupChartHover(): void {
+  const svgEl = els.chart as unknown as SVGSVGElement;
+  const tip = document.getElementById('chart-tip');
+  if (!svgEl || !tip) return;
+  const hide = () => { tip.style.display = 'none'; const h = document.getElementById('hov'); if (h) h.innerHTML = ''; };
+  svgEl.addEventListener('pointermove', (e) => {
+    if (!lastChart) { hide(); return; }
+    const { geom: g, ctx, dir, pairX, pairY } = lastChart;
+    const r = svgEl.getBoundingClientRect();
+    const vx = ((e.clientX - r.left) / r.width) * g.W;
+    const hov = document.getElementById('hov');
+    if (vx < g.padL || vx > g.W - g.padR || !(g.xmax > 0)) { hide(); return; }
+    const a = Math.min(Math.max(((vx - g.padL) / g.plotW) * g.xmax, 0), g.xmax);
+    const m = evalAt(ctx, new BigNumber(a));
+    const arV = g.all ? m.aPct : m.ar.slippage;
+    const stV = g.all ? m.sPct : m.s.slippage;
+    const sx = g.padL + (a / g.xmax) * g.plotW;
+    const syAr = g.padT + g.plotH - (Math.min(arV.toNumber(), g.ymax) / g.ymax) * g.plotH;
+    const sySt = g.padT + g.plotH - (Math.min(stV.toNumber(), g.ymax) / g.ymax) * g.plotH;
+    if (hov) hov.innerHTML =
+      '<line x1="' + sx.toFixed(1) + '" y1="' + g.padT + '" x2="' + sx.toFixed(1) + '" y2="' + (g.padT + g.plotH) + '" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>' +
+      '<circle cx="' + sx.toFixed(1) + '" cy="' + sySt.toFixed(1) + '" r="4" fill="var(--slate)"/>' +
+      '<circle cx="' + sx.toFixed(1) + '" cy="' + syAr.toFixed(1) + '" r="4.5" fill="var(--accent)" stroke="var(--bg)" stroke-width="1.5"/>';
+    const tok = dir === 'xy' ? pairX : pairY;
+    const metric = g.all ? 'all-in' : 'slippage';
+    tip.innerHTML =
+      '<div class="tip-x">' + smart(a) + ' ' + tok + ' in · ' + metric + '</div>' +
+      '<div class="tip-row"><i class="tip-dot" style="background:var(--accent)"></i> AutoRange <b>' + (m.ar.exhausted ? 'exhausted' : pct(arV)) + '</b></div>' +
+      '<div class="tip-row"><i class="tip-dot" style="background:var(--slate)"></i> Stable <b>' + pct(stV) + '</b></div>';
+    tip.style.display = 'block';
+    tip.style.left = ((sx / g.W) * r.width) + 'px';
+    tip.style.top = (((g.padT + 6) / g.H) * r.height) + 'px';
+  });
+  svgEl.addEventListener('pointerleave', hide);
 }
 
 // ---------------------------------------------------------------------------
@@ -804,6 +844,7 @@ function wire(): void {
   inp('fitBtn').addEventListener('click', fitBandUI);
   els.cmSlip.addEventListener('click', () => setChartMode('slip'));
   els.cmAll.addEventListener('click', () => setChartMode('all'));
+  setupChartHover();
 }
 
 // ---------------------------------------------------------------------------

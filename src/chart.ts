@@ -18,12 +18,21 @@ export interface ChartOpts {
   pairY: string;
 }
 
+// Geometry returned alongside the SVG so the hover handler can map a trade
+// size to pixel coordinates without re-deriving the y-scale.
+export interface ChartGeom {
+  W: number; H: number; padL: number; padR: number; padT: number;
+  plotW: number; plotH: number; xmax: number; ymax: number; all: boolean;
+}
+
+export interface ChartResult { svg: string; geom: ChartGeom | null; }
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
-export function drawChart(o: ChartOpts): string {
+export function drawChart(o: ChartOpts): ChartResult {
   const W = 720, H = 280, padL = 52, padR = 16, padT = 14, padB = 34;
   const plotW = W - padL - padR, plotH = H - padT - padB, N = 90;
-  if (!(o.xmax > 0)) return '';
+  if (!(o.xmax > 0)) return { svg: '', geom: null };
 
   const all = o.mode === 'all';
   const slipPct = (a: number) => {
@@ -90,5 +99,8 @@ export function drawChart(o: ChartOpts): string {
   }
   svg += '<text class="axlab" x="' + (padL + plotW / 2) + '" y="' + (H - 1) + '" text-anchor="middle" fill="var(--muted2)">trade size (' +
     (o.dir === 'xy' ? o.pairX : o.pairY) + ' in) — ' + (all ? 'all-in cost %' : 'slippage %') + '</text>';
-  return svg;
+  // Transparent capture rect (so empty plot area still gets pointer events) + empty hover layer.
+  svg += '<rect id="hit" x="' + padL + '" y="' + padT + '" width="' + plotW + '" height="' + plotH + '" fill="transparent"/>';
+  svg += '<g id="hov"></g>';
+  return { svg, geom: { W, H, padL, padR, padT, plotW, plotH, xmax: o.xmax, ymax, all } };
 }
