@@ -203,21 +203,23 @@
     <!-- INPUTS -->
     <div>
       <div class="panel">
-        <div class="ph">Pool setup <span class="right"><a href="#" id="openlib" style="color:var(--accent-dim)">+ manage tokens</a></span></div>
+        <div class="ph">Trade probe</div>
         <div class="field">
-          <label>Chain</label>
-          <select id="chain"></select>
+          <label>Direction</label>
+          <div class="toggle" id="dir">
+            <button data-d="xy" class="on" id="dxy">Sell X for Y</button>
+            <button data-d="yx" id="dyx">Sell Y for X</button>
+          </div>
         </div>
-        <div class="field row2">
-          <div><label>Base token (X)</label><select id="base"></select></div>
-          <div><label>Quote token (Y)</label><select id="quote"></select></div>
+        <div class="field">
+          <label>Trade size <span class="u" id="tunit">(X in)</span></label>
+          <input type="number" id="ts" value="100000" step="any">
+          <input type="range" id="tsl" min="0" max="10" step="0.01" value="100000">
         </div>
-        <div class="derived" id="derived">Select two priced tokens to derive the pair price.</div>
-        <div class="optline">
-          <button class="btn" id="apply" disabled style="flex:none;padding:8px 14px">Use pair</button>
-        </div>
+      </div>
 
-        <div class="setup-divider"></div>
+      <div class="panel">
+        <div class="ph">Pool setup <span class="right"><a href="#" id="openlib" style="color:var(--accent-dim)">+ manage tokens</a></span></div>
 
         <div class="field">
           <label>Import stable pool <span class="u" style="color:var(--accent2)">Balancer or Curve</span>
@@ -228,6 +230,21 @@
             <button class="btn" id="importBtn" style="padding:8px 14px">Import</button>
           </div>
           <div class="status" id="importStatus"></div>
+        </div>
+
+        <div class="setup-divider"></div>
+
+        <div class="field">
+          <label>Or build a pair from saved tokens</label>
+          <div class="row2" style="margin-bottom:11px">
+            <div><label style="margin-bottom:5px;color:var(--muted)">Chain</label><select id="chain"></select></div>
+            <div><label style="margin-bottom:5px;color:var(--muted)">Base token (X)</label><select id="base"></select></div>
+          </div>
+          <div class="row2">
+            <div><label style="margin-bottom:5px;color:var(--muted)">Quote token (Y)</label><select id="quote"></select></div>
+            <div style="display:flex;align-items:flex-end"><button class="btn" id="apply" disabled style="flex:1;padding:8px 14px">Use pair</button></div>
+          </div>
+          <div class="derived" id="derived">Select two priced tokens to derive the pair price.</div>
         </div>
 
         <div class="setup-divider"></div>
@@ -270,14 +287,16 @@
             <div><label style="margin-bottom:5px;color:var(--muted)">Upper bound Pb</label><input type="number" id="pb" value="1.005" step="any"></div>
           </div>
           <div class="optline" style="margin-top:10px">
-            <label><input type="checkbox" id="autoband" checked> auto-center on rate at &plusmn;</label>
-            <input type="number" id="bandw" value="0.5" step="0.1"> <span>% width</span>
+            <span style="display:inline-flex;align-items:center;gap:7px;white-space:nowrap">
+              <label style="display:inline-flex;align-items:center;gap:7px"><input type="checkbox" id="autoband" checked> auto-center &plusmn;</label>
+              <input type="number" id="bandw" value="0.5" step="0.1" style="width:60px"> <span>%</span>
+            </span>
             <button class="gbtn" id="narrow" style="flex:none;padding:6px 12px">Tighten</button>
             <button class="gbtn" id="widen" style="flex:none;padding:6px 12px">Widen</button>
           </div>
           <div class="row2" style="margin-top:11px">
             <div><label style="margin-bottom:5px;color:var(--muted)">AutoRange swap fee %</label><input type="number" id="arfee" value="0.04" step="0.001" min="0"></div>
-            <div><label style="margin-bottom:5px;color:var(--muted)">Fit band to Stable at size</label><input type="number" id="fitSize" value="100000" step="any" min="0"></div>
+            <div><label style="margin-bottom:5px;color:var(--muted)">Fit target size</label><input type="number" id="fitSize" value="100000" step="any" min="0"></div>
           </div>
           <div class="optline" style="margin-top:10px">
             <button class="gbtn" id="fitBtn" style="flex:none;padding:6px 12px">Fit band to match Stable</button>
@@ -311,28 +330,12 @@
               <button type="button" id="vuUsd" class="on">USD</button>
               <button type="button" id="vuTok">Token</button>
             </span>
-            <span class="u">applied identically to both books</span>
+            <span class="u">same for both books</span>
           </label>
           <input type="number" id="v" value="1000000" step="any">
           <div class="vusd" id="vusd"></div>
         </div>
         <div class="note" id="note"></div>
-      </div>
-
-      <div class="panel">
-        <div class="ph">Trade probe</div>
-        <div class="field">
-          <label>Direction</label>
-          <div class="toggle" id="dir">
-            <button data-d="xy" class="on" id="dxy">Sell X for Y</button>
-            <button data-d="yx" id="dyx">Sell Y for X</button>
-          </div>
-        </div>
-        <div class="field">
-          <label>Trade size <span class="u" id="tunit">(X in)</span></label>
-          <input type="number" id="ts" value="1" step="any">
-          <input type="range" id="tsl" min="0" max="10" step="0.01" value="1">
-        </div>
       </div>
     </div>
 

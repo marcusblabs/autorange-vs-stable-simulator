@@ -97,8 +97,9 @@ export function drawChart(o: ChartOpts): ChartResult {
     svg += '<circle cx="' + cx.toFixed(1) + '" cy="' + sy(Math.min(mm.st, ymax)).toFixed(1) + '" r="4" fill="var(--slate)"/>';
     svg += '<circle cx="' + cx.toFixed(1) + '" cy="' + sy(Math.min(mm.ar, ymax)).toFixed(1) + '" r="4.5" fill="var(--accent)" stroke="var(--bg)" stroke-width="1.5"/>';
   }
-  svg += '<text class="axlab" x="' + (padL + plotW / 2) + '" y="' + (H - 1) + '" text-anchor="middle" fill="var(--muted2)">trade size (' +
-    (o.dir === 'xy' ? o.pairX : o.pairY) + ' in) — ' + (all ? 'all-in cost %' : 'slippage %') + '</text>';
+  // Right-aligned so it never collides with the centered x tick labels.
+  svg += '<text class="axlab" x="' + (W - padR) + '" y="' + (H - 1) + '" text-anchor="end" fill="var(--muted2)">trade size (' +
+    (o.dir === 'xy' ? o.pairX : o.pairY) + ' in)</text>';
   // Transparent capture rect (so empty plot area still gets pointer events) + empty hover layer.
   svg += '<rect id="hit" x="' + padL + '" y="' + padT + '" width="' + plotW + '" height="' + plotH + '" fill="transparent"/>';
   svg += '<g id="hov"></g>';
