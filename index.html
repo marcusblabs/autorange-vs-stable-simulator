@@ -170,7 +170,7 @@
   <header>
     <div class="title">
       <h1><span>AutoRange</span> vs <span>Stable</span></h1>
-      <p>Compare swap slippage between a concentrated AutoRange band and a Balancer Stable pool, on the same pair and same capital. Import a Balancer stable pool to autofill its parameters, or enter them by hand.</p>
+      <p>Compare swap slippage between a concentrated AutoRange band and a StableSwap pool, on the same pair and same capital. Import a Balancer or Curve stable pool to autofill its parameters, or enter them by hand.</p>
     </div>
     <div class="pill"><span class="dot" id="netdot"></span> <span id="netlabel">live</span></div>
   </header>
@@ -220,8 +220,8 @@
         <div class="setup-divider"></div>
 
         <div class="field">
-          <label>Import Balancer stable pool
-            <span class="u">paste address or balancer.fi URL</span>
+          <label>Import stable pool <span class="u" style="color:var(--accent2)">Balancer or Curve</span>
+            <span class="u">paste address or balancer.fi / curve.finance URL</span>
           </label>
           <div class="addrow" style="grid-template-columns:1fr auto">
             <input type="text" id="importAddr" placeholder="0x111ce2a60c30f6058a57d0dbae1a39a42d998826 (msUSD/USDC)">
@@ -389,7 +389,7 @@
       </div>
 
       <footer>
-        <div><b>Method.</b> Both books are evaluated with the official Balancer maths library (<code>@balancer-labs/balancer-maths</code>), sized to the same total value and centered on the same rate. The <b>Stable</b> side is a Balancer StableSwap pool (balances rate-scaled by the per-token rate). The <b>AutoRange</b> side is Balancer's reCLAMM (readjusting concentrated-liquidity) pool — constant-product on virtual reserves <code>x_v = L/&radic;P</code>, <code>y_v = L&radic;P</code> with band exhaustion at <code>Pa</code>/<code>Pb</code>. <b>All-in cost</b> = slippage + swap fee + gas, where gas USD = units &times; gwei &times; 10⁻⁹ &times; ETH price; the <b>break-even</b> is the trade size where both books' all-in cost is equal (smaller trades favor lower gas, larger trades favor lower slippage). Pool data via the <a href="https://api-v3.balancer.fi/" target="_blank" rel="noopener">Balancer</a> API; rates via on-chain <code>getRate()</code>; token + ETH prices and live gas via <a href="https://docs.llama.fi/coin-prices-api" target="_blank" rel="noopener">DefiLlama</a> and a public RPC. All calculations use <code>bignumber.js</code> at full precision; values are only rounded for display.</div>
+        <div><b>Method.</b> Both books are evaluated with the official Balancer maths library (<code>@balancer-labs/balancer-maths</code>), sized to the same total value and centered on the same rate. The <b>Stable</b> side is a Balancer StableSwap pool (balances rate-scaled by the per-token rate). The <b>AutoRange</b> side is Balancer's reCLAMM (readjusting concentrated-liquidity) pool — constant-product on virtual reserves <code>x_v = L/&radic;P</code>, <code>y_v = L&radic;P</code> with band exhaustion at <code>Pa</code>/<code>Pb</code>. <b>All-in cost</b> = slippage + swap fee + gas, where gas USD = units &times; gwei &times; 10⁻⁹ &times; ETH price; the <b>break-even</b> is the trade size where both books' all-in cost is equal (smaller trades favor lower gas, larger trades favor lower slippage). Pool data via the <a href="https://api-v3.balancer.fi/" target="_blank" rel="noopener">Balancer</a> and <a href="https://api.curve.finance/" target="_blank" rel="noopener">Curve</a> APIs (Curve fee read on-chain via <code>fee()</code>); rates via on-chain <code>getRate()</code>; token + ETH prices and live gas via <a href="https://docs.llama.fi/coin-prices-api" target="_blank" rel="noopener">DefiLlama</a> and a public RPC. All calculations use <code>bignumber.js</code> at full precision; values are only rounded for display.</div>
       </footer>
     </div>
   </div>

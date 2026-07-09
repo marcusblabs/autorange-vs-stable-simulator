@@ -20,7 +20,7 @@ import {
 } from './cost';
 import { drawChart, type ChartGeom } from './chart';
 import {
-  CHAINS, chainLabel, fetchPrices, pick, importBalancer, WrongPoolTypeError,
+  CHAINS, chainLabel, fetchPrices, pick, importBalancer, importCurve, WrongPoolTypeError,
   readRateProviders, refreshGas,
 } from './data';
 
@@ -585,12 +585,23 @@ function setupChartHover(): void {
 async function importPool(): Promise<void> {
   const raw = valOf('importAddr');
   if (!raw.trim()) {
-    setStatus('importStatus', 'Paste a Balancer stable pool address (or balancer.fi URL).', 'warn');
+    setStatus('importStatus', 'Paste a Balancer or Curve stable pool address (or a pool URL).', 'warn');
     return;
   }
-  setStatus('importStatus', 'Looking up Balancer pool…');
+  // Venue order: URL hints win; a bare address tries Balancer first, then Curve.
+  const curveFirst = /curve\.(finance|fi)/i.test(raw);
+  const venues = curveFirst ? [importCurve, importBalancer] : [importBalancer, importCurve];
+  setStatus('importStatus', 'Looking up pool…');
   try {
-    const res = await importBalancer(raw, (msg) => setStatus('importStatus', msg));
+    let res;
+    try {
+      res = await venues[0](raw, (msg: string) => setStatus('importStatus', msg));
+    } catch (e) {
+      // Wrong pool type = found; don't fall through to the other venue.
+      if (e instanceof WrongPoolTypeError) throw e;
+      setStatus('importStatus', 'Not found on ' + (curveFirst ? 'Curve' : 'Balancer') + ' — trying ' + (curveFirst ? 'Balancer' : 'Curve') + '…');
+      res = await venues[1](raw, (msg: string) => setStatus('importStatus', msg));
+    }
     setSig('A', res.A);
     setSig('fee', res.feePct);
     setSig('arfee', res.feePct); // default AR fee to the pool's fee
@@ -611,7 +622,11 @@ async function importPool(): Promise<void> {
     recompute();
   } catch (e) {
     const m = (e as Error).message;
-    setStatus('importStatus', e instanceof WrongPoolTypeError ? m : m, 'warn');
+    setStatus(
+      'importStatus',
+      e instanceof WrongPoolTypeError ? m : 'Pool not found on Balancer or Curve. ' + m,
+      'warn',
+    );
   }
 }
 

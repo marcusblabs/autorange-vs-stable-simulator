@@ -165,6 +165,102 @@ export async function importBalancer(
 }
 
 // ---------------------------------------------------------------------------
+// Curve pool import (StableSwap registries; Ethereum mainnet)
+// ---------------------------------------------------------------------------
+
+const CURVE_API = 'https://api.curve.finance/v1/getPools/ethereum/';
+// Registries whose pools use the StableSwap invariant → importable.
+const CURVE_STABLE_REGS = ['factory-stable-ng', 'main', 'factory', 'crvusd'];
+// CryptoSwap registries → found-but-wrong-type (different invariant).
+const CURVE_CRYPTO_REGS = ['factory-crypto', 'factory-twocrypto', 'factory-tricrypto', 'crypto'];
+const CURVE_FEE_SELECTOR = '0xddca3f43'; // fee() — 1e10-scaled fraction
+
+async function findInCurveRegistries(addr: string, regs: string[], onStatus?: (m: string) => void): Promise<any | null> {
+  for (const reg of regs) {
+    onStatus?.('Checking Curve ' + reg + '…');
+    try {
+      const r = await fetch(CURVE_API + reg);
+      if (!r.ok) continue;
+      const j = await r.json();
+      const pools = (j && j.data && j.data.poolData) || [];
+      const hit = pools.find((p: any) => (p.address || '').toLowerCase() === addr);
+      if (hit) return hit;
+    } catch {
+      /* registry miss → keep scanning */
+    }
+  }
+  return null;
+}
+
+/** Curve pool swap fee in percent, read on-chain (fee() is 1e10-scaled). */
+async function curveFeePct(addr: string): Promise<BN> {
+  try {
+    const body = { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: addr, data: CURVE_FEE_SELECTOR }, 'latest'] };
+    const r = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (j.error || !j.result || j.result === '0x') throw new Error('no fee()');
+    return new BigNumber(BigInt(j.result).toString()).div('1e10').times(100);
+  } catch {
+    return new BigNumber(0.04); // Curve stable default
+  }
+}
+
+/**
+ * Look up a Curve pool by address across the StableSwap registries.
+ * Returns the same shape as importBalancer so the UI treats both alike.
+ */
+export async function importCurve(
+  raw: string,
+  onStatus?: (msg: string) => void,
+): Promise<BalancerImport> {
+  const addr = parseAddr(raw);
+  if (!addr) throw new Error('Paste a Curve pool address (or curve.finance URL).');
+
+  const hit = await findInCurveRegistries(addr, CURVE_STABLE_REGS, onStatus);
+  if (!hit) {
+    // Distinguish "crypto pool" from "not found" for a useful error.
+    const crypto = await findInCurveRegistries(addr, CURVE_CRYPTO_REGS, onStatus);
+    if (crypto) {
+      throw new WrongPoolTypeError(
+        'Found ' + (crypto.name || addr.slice(0, 10)) + ' in a Curve CryptoSwap registry — ' +
+        'this simulator compares against StableSwap pools only.',
+      );
+    }
+    throw new Error('Not found in any Curve mainnet StableSwap registry.');
+  }
+
+  const A = new BigNumber(hit.amplificationCoefficient || 300);
+  onStatus?.('Reading fee() on-chain…');
+  const feePct = await curveFeePct(addr);
+
+  const coinsArr: any[] = hit.coins || [];
+  const coins: string[] = coinsArr.map((c) => c.symbol || '?');
+  // Rate (Y per X) and quote price from the registry's per-coin USD prices.
+  let rate = new BigNumber(1);
+  let priceY = new BigNumber(0);
+  if (coinsArr.length >= 2) {
+    const p0 = new BigNumber(coinsArr[0].usdPrice || 0);
+    const p1 = new BigNumber(coinsArr[1].usdPrice || 0);
+    if (p0.gt(0) && p1.gt(0)) rate = p0.div(p1);
+    if (p1.gt(0)) priceY = p1;
+  }
+
+  const oracleNote = hit.usesRateOracle ? ' (uses rate oracle)' : '';
+  return {
+    name: 'Curve · ' + (hit.name || hit.symbol || addr.slice(0, 10)) + oracleNote,
+    chain: 'MAINNET',
+    type: 'STABLE',
+    A,
+    feePct,
+    rate,
+    rpx: '', // Curve pools rate-scale internally; no Balancer-style getRate providers
+    rpy: '',
+    coins,
+    priceY,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // On-chain reads
 // ---------------------------------------------------------------------------
 
